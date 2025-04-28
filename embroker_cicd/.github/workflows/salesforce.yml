@@ -1,1 +1,40 @@
-${{secrets.ACC_SFDX_URL}}
+name: CI/CD Deploy to Sandbox
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Salesforce CLI
+        run: npm install sfdx-cli --global
+
+      - name: Authenticate with JWT
+        run: |
+          echo "${{ secrets.SF_JWT_KEY }}" > server.key
+          sfdx auth:jwt:grant --clientid ${{ secrets.SF_CLIENT_ID }} \
+            --jwtkeyfile server.key \
+            --username ${{ secrets.SF_USERNAME_SANDBOX }} \
+            --instanceurl ${{ secrets.SF_INSTANCE_URL }} \
+            --setalias sandbox
+
+      - name: Convert Source to Metadata API Format
+        run: sfdx force:source:convert -r force-app -d deploy-mdapi
+
+      - name: Validate Deployment
+        run: |
+          sfdx force:mdapi:deploy -d deploy-mdapi -u sandbox -w 10 -c -l RunLocalTests
+
+      - name: Deploy to Sandbox
+        run: |
+          sfdx force:mdapi:deploy -d deploy-mdapi -u sandbox -w 10 -l RunLocalTests
+
+      - name: Show Deployment Status
+        run: sfdx force:mdapi:deploy:report -u sandbox
